@@ -157,17 +157,23 @@ void send_data(int fd, int events, void *arg)
 
 int read_content(char* buff, int len)
 {
-	int nlen = 0;
+	int nle = 0;
 	istringstream strm(buff);
-	string line;
-	memset(buff, 0, len + 1);
+	string line,
+	       method, url, path,
+	       ret;
+	bzero(buff, len + 1);
 
 	getline(strm, line);
-	strcpy(&buff[nlen], line.c_str());
-	nlen += line.size();
-	buff[nlen] = '\0';
+	istringstream line_strm(line);
+	line_strm >> method;
+	if(method == "GET")
+		ret += method + "\r\n";
 
-	return nlen;
+	nle = ret.size();
+	strcpy(buff, ret.c_str());
+
+	return nle;
 }
 
 void headers(int clientfd, int len)
