@@ -20,14 +20,15 @@ using namespace std;
 
 void error_die(const char*);
 int startup(u_short*);
-int read_content(char*, int);
 void cat(int, FILE*);
 void cannot_execute(int);
 void execute(int, const char*,const char*);
-void headers(int, int);
 void not_found(int);
 void serve_file(int, const char*);
 void unimplemented(int);
+
+void headers(int, int);
+int read_data(int, stringstream&);
 
 void recv_data(int, int, void*);
 void send_data(int, int, void*);
@@ -39,10 +40,8 @@ struct event_tag
 	void (*call_back)(int, int, void*);
 	int events;
 	void *arg;
-	char buff[1024];
-	int len;
 	int status;
-	long last_active;
+	stringstream data;
 
 	void reset(int fd, void (*call_back)(int, int, void*), void *arg)
 	{
@@ -51,7 +50,7 @@ struct event_tag
 		this->events = 0;
 		this->status = 0;
 		(int)arg ? this->arg = arg : this->arg = this;
-		this->last_active = time(NULL);
+		data.clear();
 	}
 
 	void update(int epollfd, int events)
@@ -121,15 +120,25 @@ void recv_data(int fd, int events, void *arg)
 {
 	event_tag *ev = (event_tag*)arg;
 	char buff[1024];
-	int len = recv(fd, buff, sizeof(buff)-1, 0);
+	int len = 0;
+
+	ev->data.clear();
+	ev->data.str("");	
+	while(true)
+	{
+		len = recv(fd, buff, sizeof(buff)-1, 0);
+		if(len > 0)
+		{
+			buff[len] = '\0';
+			ev->data << buff;
+		}
+		else
+			break;
+	}
 
 	ev->remove(epollfd);
-	if(len > 0)
+	if(errno == EWOULDBLOCK || errno == EAGAIN)
 	{
-		buff[len] = '\0';
-		strncpy(ev->buff, buff, len + 1);
-		ev->len = len;
-
 		ev->reset(fd, send_data, (void*)0);
 		ev->update(epollfd, EPOLLOUT|EPOLLET);
 	}
@@ -140,10 +149,7 @@ void recv_data(int fd, int events, void *arg)
 void send_data(int fd, int events, void *arg)
 {
 	event_tag *ev = (event_tag*)arg;
-	ev->len = read_content(ev->buff, ev->len);
-	headers(fd, ev->len);
-	int len = send(fd, ev->buff, ev->len, 0);
-	ev->len = 0;
+	int len = read_data(fd, ev->data);
 
 	ev->remove(epollfd);
 	if(len > 0)
@@ -151,29 +157,28 @@ void send_data(int fd, int events, void *arg)
 		ev->reset(fd, recv_data, (void*)0);
 		ev->update(epollfd, EPOLLIN|EPOLLET);
 	}
-	else
-		close(fd);
 }
 
-int read_content(char* buff, int len)
+int read_data(int clientfd, stringstream &data)
 {
-	int nle = 0;
-	istringstream strm(buff);
-	string line,
-	       method, url, path,
-	       ret;
-	bzero(buff, len + 1);
+	int len = 0, cgi = 0;
+	string line, ret,
+	       method, url, path;
 
-	getline(strm, line);
-	istringstream line_strm(line);
-	line_strm >> method;
+	getline(data, line);
+	stringstream strm(line);
+	strm >> method >> url;
+
 	if(method == "GET")
-		ret += method + "\r\n";
+		ret += url + "\r\n";
+	else if(method == "POST")
+		cgi = 1;
 
-	nle = ret.size();
-	strcpy(buff, ret.c_str());
+	len = ret.size();
+	headers(clientfd, len);
+	len = send(clientfd, ret.c_str(), ret.size(), 0);
 
-	return nle;
+	return len;
 }
 
 void headers(int clientfd, int len)
