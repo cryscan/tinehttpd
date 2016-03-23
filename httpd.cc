@@ -1,5 +1,4 @@
 #include <string>
-#include <sstream>
 #include <iostream>
 #include <regex>
 #include <ctype.h>
@@ -137,7 +136,7 @@ void recv_data(int fd, int events, void *arg)
 	}
 
 	ev->remove(epollfd);
-	if(errno == EWOULDBLOCK || errno == EAGAIN)
+	if(errno == EAGAIN)
 	{
 		ev->reset(fd, send_data, (void*)0);
 		ev->update(epollfd, EPOLLOUT|EPOLLET);
@@ -164,19 +163,46 @@ int read_data(int clientfd, stringstream &data)
 	int len = 0, cgi = 0;
 	string line, ret,
 	       method, url, path;
+	char *query_string = NULL;
+	map<string, string> domain;
 
 	getline(data, line);
 	stringstream strm(line);
 	strm >> method >> url;
 
 	if(method == "GET")
-		ret += url + "\r\n";
+	{
+		auto loc = url.find('?');
+		if(loc != string::npos)
+		{
+			string query;
+			query.assign(url, loc+1, string::npos);
+			query_string = (char*)malloc(query.size() + 1);
+			strcpy(query_string, query.c_str());
+			url.resize(loc);
+			cgi = 1;
+		}
+	}
 	else if(method == "POST")
 		cgi = 1;
+	else
+		close(clientfd);
 
-	len = ret.size();
+	while(getline(data, line))
+	{
+		auto loc = line.find(": ");
+		if(loc != string::npos)
+		{
+			string first, second;
+			first.assign(line, 0, loc);
+			second.assign(line, loc+2, string::npos);
+			domain[first] = second;
+		}
+	}
+
+	len = ret.length();
 	headers(clientfd, len);
-	len = send(clientfd, ret.c_str(), ret.size(), 0);
+	len = send(clientfd, ret.c_str(), ret.length(), 0);
 
 	return len;
 }
