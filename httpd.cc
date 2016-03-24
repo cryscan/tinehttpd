@@ -102,7 +102,7 @@ void accept_connect(int fd, int events, void *arg)
 	do
 	{
 		if(fcntl(clientfd, F_SETFL, O_NONBLOCK) < 0)
-			break ;
+			break;
 		for(i = 0; i < max_events; i++)
 			if(event_tag_lst[i]->status == 0)
 				break;
@@ -199,6 +199,12 @@ int read_data(int clientfd, stringstream &data)
 			domain[first] = second;
 		}
 	}
+
+	path = url;
+	path.insert(0, "htdocs");
+	if(*(--path.cend()) == '/')
+		path += "index.html";
+	ret = path;
 
 	len = ret.length();
 	headers(clientfd, len);
