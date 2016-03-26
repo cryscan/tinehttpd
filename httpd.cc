@@ -1,5 +1,6 @@
 #include <string>
 #include <iostream>
+#include <fstream>
 #include <regex>
 #include <ctype.h>
 #include <stdlib.h>
@@ -19,15 +20,14 @@ using namespace std;
 
 void error_die(const char*);
 int startup(u_short*);
-void cat(int, FILE*);
 void cannot_execute(int);
 void execute(int, const char*,const char*);
 void not_found(int);
-void serve_file(int, const char*);
 void unimplemented(int);
 
 void headers(int, int);
-int read_data(int, stringstream&);
+void read_data(int, stringstream&);
+void serve_file(int, string);
 
 void recv_data(int, int, void*);
 void send_data(int, int, void*);
@@ -148,23 +148,21 @@ void recv_data(int fd, int events, void *arg)
 void send_data(int fd, int events, void *arg)
 {
 	event_tag *ev = (event_tag*)arg;
-	int len = read_data(fd, ev->data);
+	read_data(fd, ev->data);
 
 	ev->remove(epollfd);
-	if(len > 0)
-	{
-		ev->reset(fd, recv_data, (void*)0);
-		ev->update(epollfd, EPOLLIN|EPOLLET);
-	}
+	ev->reset(fd, recv_data, (void*)0);
+	ev->update(epollfd, EPOLLIN|EPOLLET);
 }
 
-int read_data(int clientfd, stringstream &data)
+void read_data(int clientfd, stringstream &data)
 {
 	int len = 0, cgi = 0;
 	string line, ret,
 	       method, url, path;
 	char *query_string = NULL;
 	map<string, string> domain;
+	struct stat st;
 
 	getline(data, line);
 	stringstream strm(line);
@@ -204,13 +202,31 @@ int read_data(int clientfd, stringstream &data)
 	path.insert(0, "htdocs");
 	if(*(--path.cend()) == '/')
 		path += "index.html";
-	ret = path;
+	if(stat(path.c_str(), &st) == -1)
+	{
+	}
+	else
+	{
+		if((st.st_mode & S_IFMT) == S_IFDIR)
+			path += "index.html";
+		if((st.st_mode & S_IXUSR) || (st.st_mode & S_IXGRP) || (st.st_mode % S_IXOTH))
+			cgi = 1;
+		if(!cgi)
+			serve_file(clientfd, path);
+	}
+}
 
-	len = ret.length();
+void serve_file(int clientfd, string filename)
+{
+	ifstream fstrm(filename);
+	string line, ret;
+
+	while(getline(fstrm, line))
+		ret += line;
+
+	int len = ret.length();
 	headers(clientfd, len);
-	len = send(clientfd, ret.c_str(), ret.length(), 0);
-
-	return len;
+	len = send(clientfd, ret.c_str(), len, 0);
 }
 
 void headers(int clientfd, int len)
