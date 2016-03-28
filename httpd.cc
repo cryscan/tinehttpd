@@ -98,6 +98,7 @@ void accept_connect(int fd, int events, void *arg)
 	if((clientfd = accept(fd, (sockaddr*)&client_name, &client_name_len)) == -1)
 		if(errno != EAGAIN && errno != EINTR)
 			return;
+	printf("client:%s\n", inet_ntoa(client_name.sin_addr));
 
 	do
 	{
@@ -157,7 +158,7 @@ void send_data(int fd, int events, void *arg)
 
 void read_data(int clientfd, stringstream &data)
 {
-	int len = 0, cgi = 0;
+	int cgi = 0;
 	string line, ret,
 	       method, url, path;
 	char *query_string = NULL;
@@ -203,8 +204,7 @@ void read_data(int clientfd, stringstream &data)
 	if(*(--path.cend()) == '/')
 		path += "index.html";
 	if(stat(path.c_str(), &st) == -1)
-	{
-	}
+		not_found(clientfd);
 	else
 	{
 		if((st.st_mode & S_IFMT) == S_IFDIR)
@@ -235,13 +235,34 @@ void headers(int clientfd, int len)
 
 	strcpy(buff, "HTTP/1.1 200 OK\r\n");
 	send(clientfd, buff, strlen(buff), 0);
-	strcpy(buff, "Server:jdbhttpd/0.1.0\r\n");
+	strcpy(buff, "Server: jdbhttpd/0.1.0\r\n");
+	send(clientfd, buff, strlen(buff), 0);
+	strcpy(buff, "Content-Type: text/html\r\n");
+	send(clientfd, buff, strlen(buff), 0);
+	sprintf(buff, "Content-Length: %d\r\n", len);
+	send(clientfd, buff, strlen(buff), 0);
+	strcpy(buff, "\r\n");
+	send(clientfd, buff, strlen(buff), 0);
+}
+
+void not_found(int clientfd)
+{
+	char buff[1024];
+	char html[] = "<HTML><TITLE>Not Found</TITLE>\r\n\
+		<BODY><P>The servlet could not fulfill your request because the resource specified is unavailable or nonexisted.\r\n\
+		</BODY></HTML>\r\n";
+
+	strcpy(buff, "HTTP/1.1 404 NOT FOUND\r\n");
+	send(clientfd, buff, strlen(buff), 0);
+	strcpy(buff, "Server: jdbhttpd/0.1.0\r\n");
 	send(clientfd, buff, strlen(buff), 0);
 	strcpy(buff, "Content-Type:text/html\r\n");
 	send(clientfd, buff, strlen(buff), 0);
-	sprintf(buff, "Content-Length:%d\r\n", len);
+	sprintf(buff, "Content-Length: %d\r\n", sizeof(html));
 	send(clientfd, buff, strlen(buff), 0);
 	strcpy(buff, "\r\n");
+	send(clientfd, buff, strlen(buff), 0);
+	strcpy(buff, html);
 	send(clientfd, buff, strlen(buff), 0);
 }
 
