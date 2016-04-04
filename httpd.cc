@@ -1,6 +1,8 @@
 #include <string>
 #include <iostream>
+#include <sstream>
 #include <fstream>
+#include <map>
 #include <regex>
 #include <ctype.h>
 #include <stdlib.h>
@@ -20,14 +22,15 @@ using namespace std;
 
 void error_die(const char*);
 int startup(u_short*);
-void cannot_execute(int);
-void execute(int, const char*,const char*);
-void not_found(int);
 void unimplemented(int);
 
 void headers(int, int);
-void read_data(int, stringstream&);
-void serve_file(int, string);
+int read_data(int, stringstream&);
+int serve_file(int, string);
+int execute_cgi(int, const string, const string, const string, const map<string, string>&);
+void not_found(int);
+void bad_request(int);
+void cannot_execute(int);
 
 void recv_data(int, int, void*);
 void send_data(int, int, void*);
@@ -149,19 +152,23 @@ void recv_data(int fd, int events, void *arg)
 void send_data(int fd, int events, void *arg)
 {
 	event_tag *ev = (event_tag*)arg;
-	read_data(fd, ev->data);
+	int len = read_data(fd, ev->data);
 
 	ev->remove(epollfd);
-	ev->reset(fd, recv_data, (void*)0);
-	ev->update(epollfd, EPOLLIN|EPOLLET);
+	if(len > 0)
+	{
+		ev->reset(fd, recv_data, (void*)0);
+		ev->update(epollfd, EPOLLIN|EPOLLET);
+	}
+	else
+		close(fd);
 }
 
-void read_data(int clientfd, stringstream &data)
+int read_data(int clientfd, stringstream &data)
 {
 	int cgi = 0;
 	string line, ret,
-	       method, url, path;
-	char *query_string = NULL;
+	       method, url, path, query;
 	map<string, string> domain;
 	struct stat st;
 
@@ -174,10 +181,7 @@ void read_data(int clientfd, stringstream &data)
 		auto loc = url.find('?');
 		if(loc != string::npos)
 		{
-			string query;
 			query.assign(url, loc+1, string::npos);
-			query_string = (char*)malloc(query.size() + 1);
-			strcpy(query_string, query.c_str());
 			url.resize(loc);
 			cgi = 1;
 		}
@@ -197,6 +201,8 @@ void read_data(int clientfd, stringstream &data)
 			second.assign(line, loc+2, string::npos);
 			domain[first] = second;
 		}
+		else
+			domain["post"] = line;
 	}
 
 	path = url;
@@ -212,11 +218,101 @@ void read_data(int clientfd, stringstream &data)
 		if((st.st_mode & S_IXUSR) || (st.st_mode & S_IXGRP) || (st.st_mode % S_IXOTH))
 			cgi = 1;
 		if(!cgi)
-			serve_file(clientfd, path);
+			return serve_file(clientfd, path);
+		else
+			return execute_cgi(clientfd, path, method, query, domain);
 	}
 }
 
-void serve_file(int clientfd, string filename)
+int execute_cgi(int clientfd, const string path, const string method, const string query, const map<string, string> &domain)
+{
+	char buff[1024];
+	int output[2];
+	int input[2];
+	pid_t pid;
+	int status;
+	int content_length = -1;
+	char ch;
+	string ret;
+
+	if(method == "POST")
+	{
+		auto iter = domain.find("Content-Length");
+		if(iter != domain.cend())
+			content_length = atoi(iter->second.c_str());
+		else
+		{
+			bad_request(clientfd);
+			return -1;
+		}
+	}
+
+	if((pipe(output) < 0) ||
+			(pipe(input) < 0) ||
+			((pid = fork()) < 0))
+	{
+		cannot_execute(clientfd);
+		return -1;
+	}
+
+	if(pid == 0)
+	{
+		string method_env = method;
+		string query_env = query;
+		char length_env[255];
+		char path_str[255];
+
+		dup2(output[1], 1);
+		dup2(input[0], 0);
+		close(output[0]);
+		close(input[1]);
+
+		method_env.insert(0, "REQUEST_METHOD=");
+		putenv((char*)method_env.c_str());
+
+		if(method == "GET")
+		{
+			query_env.insert(0, "QUERY_STRING=");	
+			putenv((char*)query_env.c_str());
+		}
+		else
+		{
+			sprintf(length_env, "CONTENT_LENGTH=%d", content_length);
+			putenv(length_env);
+		}
+
+		strcpy(path_str, path.c_str());
+		execl(path_str, path_str, NULL);
+		exit(0);
+	}
+	else
+	{
+		close(output[1]);
+		close(input[0]);
+
+		if(method == "POST")
+		{
+			auto iter = domain.find("post");
+			if(iter != domain.cend())
+				ret = iter->second;
+			write(input[1], ret.c_str(), ret.length());
+		}
+
+		ret.clear();
+		while(read(output[0], &ch, 1) > 0)
+			ret += ch;
+
+		close(output[0]);
+		close(input[1]);
+		waitpid(pid, &status, 0);
+	}
+
+	int len = ret.length();
+	headers(clientfd, len);
+	return len = send(clientfd, ret.c_str(), len, 0);
+}
+
+int serve_file(int clientfd, string filename)
 {
 	ifstream fstrm(filename);
 	string line, ret;
@@ -226,7 +322,7 @@ void serve_file(int clientfd, string filename)
 
 	int len = ret.length();
 	headers(clientfd, len);
-	len = send(clientfd, ret.c_str(), len, 0);
+	return len = send(clientfd, ret.c_str(), len, 0);
 }
 
 void headers(int clientfd, int len)
@@ -249,10 +345,48 @@ void not_found(int clientfd)
 {
 	char buff[1024];
 	char html[] = "<HTML><TITLE>Not Found</TITLE>\r\n\
-		<BODY><P>The servlet could not fulfill your request because the resource specified is unavailable or nonexisted.\r\n\
-		</BODY></HTML>\r\n";
+		       <BODY><P>The servlet could not fulfill your request because the resource specified is unavailable or nonexisted.\r\n\
+		       </BODY></HTML>\r\n";
 
 	strcpy(buff, "HTTP/1.1 404 NOT FOUND\r\n");
+	send(clientfd, buff, strlen(buff), 0);
+	strcpy(buff, "Server: jdbhttpd/0.1.0\r\n");
+	send(clientfd, buff, strlen(buff), 0);
+	strcpy(buff, "Content-Type:text/html\r\n");
+	send(clientfd, buff, strlen(buff), 0);
+	sprintf(buff, "Content-Length: %d\r\n", sizeof(html));
+	send(clientfd, buff, strlen(buff), 0);
+	strcpy(buff, "\r\n");
+	send(clientfd, buff, strlen(buff), 0);
+	strcpy(buff, html);
+	send(clientfd, buff, strlen(buff), 0);
+}
+
+void bad_request(int clientfd)
+{
+	char buff[1024];
+	char html[] = "<P>Your browser sent a bad request.\r\n";
+
+	strcpy(buff, "HTTP/1.1 400 BAD REQUEST\r\n");
+	send(clientfd, buff, strlen(buff), 0);
+	strcpy(buff, "Server: jdbhttpd/0.1.0\r\n");
+	send(clientfd, buff, strlen(buff), 0);
+	strcpy(buff, "Content-Type:text/html\r\n");
+	send(clientfd, buff, strlen(buff), 0);
+	sprintf(buff, "Content-Length: %d\r\n", sizeof(html));
+	send(clientfd, buff, strlen(buff), 0);
+	strcpy(buff, "\r\n");
+	send(clientfd, buff, strlen(buff), 0);
+	strcpy(buff, html);
+	send(clientfd, buff, strlen(buff), 0);
+}
+
+void cannot_execute(int clientfd)
+{
+	char buff[1024];
+	char html[] = "<P>Error prohibited CGI execution.\r\n";
+
+	strcpy(buff, "HTTP/1.1 500 Internal Server Error\r\n");
 	send(clientfd, buff, strlen(buff), 0);
 	strcpy(buff, "Server: jdbhttpd/0.1.0\r\n");
 	send(clientfd, buff, strlen(buff), 0);
