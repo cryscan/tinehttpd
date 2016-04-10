@@ -26,8 +26,9 @@ void unimplemented(int);
 
 void headers(int, int);
 int read_data(int, stringstream&);
-int serve_file(int, string);
+int serve_file(int, const string);
 int execute_cgi(int, const string, const string, const string, const map<string, string>&);
+int upgrade_protocol(int, const map<string, string>&);
 void not_found(int);
 void bad_request(int);
 void cannot_execute(int);
@@ -51,7 +52,7 @@ struct event_tag
 		this->call_back = call_back;
 		this->events = 0;
 		this->status = 0;
-		(int)arg ? this->arg = arg : this->arg = this;
+		arg ? this->arg = arg : this->arg = this;
 		data.clear();
 	}
 
@@ -176,21 +177,6 @@ int read_data(int clientfd, stringstream &data)
 	stringstream strm(line);
 	strm >> method >> url;
 
-	if(method == "GET")
-	{
-		auto loc = url.find('?');
-		if(loc != string::npos)
-		{
-			query.assign(url, loc+1, string::npos);
-			url.resize(loc);
-			cgi = 1;
-		}
-	}
-	else if(method == "POST")
-		cgi = 1;
-	else
-		close(clientfd);
-
 	while(getline(data, line))
 	{
 		auto loc = line.find(": ");
@@ -202,8 +188,28 @@ int read_data(int clientfd, stringstream &data)
 			domain[first] = second;
 		}
 		else
-			domain["post"] = line;
+			domain[""] = line;
 	}
+
+	if(method == "GET")
+	{
+		auto loc = url.find('?');
+		if(loc != string::npos)
+		{
+			query.assign(url, loc+1, string::npos);
+			url.resize(loc);
+			cgi = 1;
+		}
+
+		auto iter = domain.find("Connection");
+		if(iter != domain.cend())
+			if(iter->second == "Upgrade")
+				return upgrade_protocol(clientfd, domain);
+	}
+	else if(method == "POST")
+		cgi = 1;
+	else
+		close(clientfd);
 
 	path = url;
 	path.insert(0, "htdocs");
@@ -222,6 +228,7 @@ int read_data(int clientfd, stringstream &data)
 		else
 			return execute_cgi(clientfd, path, method, query, domain);
 	}
+	return 1;
 }
 
 int execute_cgi(int clientfd, const string path, const string method, const string query, const map<string, string> &domain)
@@ -292,7 +299,7 @@ int execute_cgi(int clientfd, const string path, const string method, const stri
 
 		if(method == "POST")
 		{
-			auto iter = domain.find("post");
+			auto iter = domain.find("");
 			if(iter != domain.cend())
 				ret = iter->second;
 			write(input[1], ret.c_str(), ret.length());
@@ -312,7 +319,12 @@ int execute_cgi(int clientfd, const string path, const string method, const stri
 	return len = send(clientfd, ret.c_str(), len, 0);
 }
 
-int serve_file(int clientfd, string filename)
+int upgrade_protocol(int clientfd, const map<string, string> &domain)
+{
+	return 1;
+}
+
+int serve_file(int clientfd, const string filename)
 {
 	ifstream fstrm(filename);
 	string line, ret;

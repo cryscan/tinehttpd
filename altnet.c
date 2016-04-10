@@ -78,7 +78,7 @@ int main(int argc, char* argv[])
 		else
 		{
 			theta = alpha + beta;
-			printf("<P>%ld add %ld equals %ld\n", alpha, beta, theta);
+			printf("<P>%ld add %ld equals to %ld\n", alpha, beta, theta);
 		}
 
 		free(buf);
