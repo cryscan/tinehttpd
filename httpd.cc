@@ -209,7 +209,7 @@ int read_data(int clientfd, stringstream &data)
 	else if(method == "POST")
 		cgi = 1;
 	else
-		close(clientfd);
+		return -1;
 
 	path = url;
 	path.insert(0, "htdocs");
