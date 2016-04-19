@@ -1,4 +1,4 @@
-SUBDIRS=src/httpd
+SUBDIRS=src/httpd src/htdocs
 CURRENTPATH=$(shell /bin/pwd)
-INCLUDES=-I$(CURRENTPATH)/src/include
+INCLUDES=-I$(CURRENTPATH)/include
 export INCLUDES

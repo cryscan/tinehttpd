@@ -27,4 +27,5 @@ AC_FUNC_FORK
 AC_CHECK_FUNCS([dup2 inet_ntoa memset putenv socket])
 
 AC_OUTPUT([Makefile
+	   src/htdocs/Makefile
 	   src/httpd/Makefile])
