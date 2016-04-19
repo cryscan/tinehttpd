@@ -101,7 +101,7 @@ void accept_connect(int fd, int events, void *arg)
 	unsigned int client_name_len = sizeof(client_name);
 
 	int clientfd, i;
-	if ((clientfd = accept(fd, (sockaddr *) & client_name, &client_name_len)) == -1)
+	if ((clientfd = accept(fd, (sockaddr *) & client_name, (socklen_t *) & client_name_len)) == -1)
 		if (errno != EAGAIN && errno != EINTR)
 			return;
 	printf("client:%s\n", inet_ntoa(client_name.sin_addr));
@@ -182,7 +182,7 @@ int read_http(int clientfd, stringstream & data, int &protocol)
 
 	while (getline(data, line))
 	{
-		auto loc = line.find(": ");
+		auto loc = line.find(':');
 		if (loc != string::npos)
 		{
 			string first, second;
@@ -215,7 +215,7 @@ int read_http(int clientfd, stringstream & data, int &protocol)
 		return -1;
 
 	path = url;
-	path.insert(0, "../share/htdocs");
+	path.insert(0, "/usr/local/share/htdocs");
 	if (*(--path.cend()) == '/')
 		path += "index.html";
 	if (stat(path.c_str(), &st) == -1)
@@ -436,12 +436,16 @@ int startup(u_short * port)
 	if (*port == 0)
 	{
 		unsigned int namelen = sizeof(name);
-		if (getsockname(httpd, (sockaddr *) & name, &namelen) == -1)
+		if (getsockname(httpd, (sockaddr *) & name, (socklen_t *) & namelen) == -1)
 			error_die("get socket name\n");
 		*port = ntohs(name.sin_port);
 	}
 	if (listen(httpd, SOMAXCONN) < 0)
 		error_die("listen\n");
+
+	char port_env[255];
+	sprintf(port_env, "PORT_NO=%d", *port);
+	putenv(port_env);
 
 	return httpd;
 }
@@ -475,7 +479,6 @@ int main(int argc, char *argv[])
 				ev->call_back(ev->fd, events[i].events, ev->arg);
 			if ((events[i].events & EPOLLOUT) && (ev->events & EPOLLOUT))
 				ev->call_back(ev->fd, events[i].events, ev->arg);
-
 		}
 	}
 
