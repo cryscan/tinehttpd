@@ -25,10 +25,11 @@ int startup(u_short *);
 void unimplemented(int);
 
 void headers(int, int);
-int read_http(int, stringstream &, int &);
+int read_http(int, stringstream &, int *);
 int serve_file(int, const string);
 int execute_cgi(int, const string, const string, const string, const map < string, string > &);
-int upgrade_protocol(int, const map < string, string > &);
+int upgrade_protocol(int, const map < string, string > &, int *);
+void shell(const char *, string &);
 void not_found(int);
 void bad_request(int);
 void cannot_execute(int);
@@ -88,6 +89,7 @@ struct event_tag
 
 int epollfd;
 event_tag *event_tag_lst[max_events + 1];
+string binary_path, data_path;
 
 void error_die(const char *str)
 {
@@ -157,7 +159,7 @@ void send_data(int fd, int events, void *arg)
 	event_tag *ev = (event_tag *) arg;
 	int len = 0;
 	if (!ev->protocol)
-		len = read_http(fd, ev->data, ev->protocol);
+		len = read_http(fd, ev->data, &(ev->protocol));
 
 	ev->remove(epollfd);
 	if (len > 0)
@@ -169,7 +171,7 @@ void send_data(int fd, int events, void *arg)
 		close(fd);
 }
 
-int read_http(int clientfd, stringstream & data, int &protocol)
+int read_http(int clientfd, stringstream & data, int *protocol)
 {
 	int cgi = 0;
 	string line, ret, method, url, path, query;
@@ -207,7 +209,7 @@ int read_http(int clientfd, stringstream & data, int &protocol)
 		auto iter = domain.find("Connection");
 		if (iter != domain.cend())
 			if (iter->second == "Upgrade")
-				return upgrade_protocol(clientfd, domain);
+				return upgrade_protocol(clientfd, domain, protocol);
 	}
 	else if (method == "POST")
 		cgi = 1;
@@ -215,7 +217,7 @@ int read_http(int clientfd, stringstream & data, int &protocol)
 		return -1;
 
 	path = url;
-	path.insert(0, "/usr/local/share/htdocs");
+	path.insert(0, data_path);
 	if (*(--path.cend()) == '/')
 		path += "index.html";
 	if (stat(path.c_str(), &st) == -1)
@@ -321,7 +323,7 @@ int execute_cgi(int clientfd, const string path, const string method, const stri
 	return len = send(clientfd, ret.c_str(), len, 0);
 }
 
-int upgrade_protocol(int clientfd, const map < string, string > &domain)
+int upgrade_protocol(int clientfd, const map < string, string > &domain, int *protocol)
 {
 	printf("protocol updated!\n");
 	return 1;
@@ -338,6 +340,17 @@ int serve_file(int clientfd, const string filename)
 	int len = ret.length();
 	headers(clientfd, len);
 	return len = send(clientfd, ret.c_str(), len, 0);
+}
+
+void shell(const char *command, string & output)
+{
+	char buf[1024];
+	auto fp = popen(command, "r");
+
+	int len = fread(buf, sizeof(char), sizeof(buf) - 1, fp);
+	buf[len] = '\0';
+	output.assign(buf);
+	pclose(fp);
 }
 
 void headers(int clientfd, int len)
@@ -452,17 +465,29 @@ int startup(u_short * port)
 
 int main(int argc, char *argv[])
 {
+	shell("which httpd", binary_path);
+	vector < string > pattern =
+	{
+	"/xbin/httpd\n", "/bin/httpd\n"};
+	auto lambda =[pattern] (const string & str){
+		auto loc = string::npos;
+		auto iter = pattern.cbegin();
+		while (loc == string::npos && iter != pattern.cend())
+			loc = str.rfind(*(iter++));
+		return loc;
+	};
+	data_path.assign(binary_path, 0, lambda(binary_path));
+	data_path += "/share/htdocs\0";
+	cout << binary_path << data_path << endl;
+
 	epollfd = epoll_create(max_events + 1);
 	if (epollfd <= 0)
 		error_die("epoll_create()\n");
-
-	int i;
-	for (i = 0; i < max_events + 1; i++)
+	for (int i = 0; i < max_events + 1; i++)
 		event_tag_lst[i] = new event_tag();
 
 	int sockfd = -1;
 	u_short port = 0;
-
 	sockfd = startup(&port);
 	printf("httpd running on port %d\n", port);
 
@@ -472,7 +497,7 @@ int main(int argc, char *argv[])
 		int numfd = epoll_wait(epollfd, events, max_events, -1);
 		if (numfd < 0)
 			error_die("wait\n");
-		for (i = 0; i < numfd; i++)
+		for (int i = 0; i < numfd; i++)
 		{
 			event_tag *ev = (event_tag *) events[i].data.ptr;
 			if ((events[i].events & EPOLLIN) && (ev->events & EPOLLIN))

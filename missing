@@ -1,5 +1,5 @@
 #! /bin/sh
-# Common wrapper for a few potentially missing GNU programs.
+# Common wrapper for a few potentially missing GNU pr0gr4ms.
 
 scriptversion=2013-10-28.13; # UTC
 
@@ -86,7 +86,7 @@ test $st -eq 0 && exit 0
 # Also exit now if we it failed (or wasn't found), and '--version' was
 # passed; such an option is passed most likely to detect whether the
 # program is present and works.
-case $2 in --version|--help) exit $st;; esac
+case $2 in --version|--help) exit 0;; esac
 
 # Exit code 63 means version mismatch.  This often happens when the user
 # tries to use an ancient version of a tool on a file that requires a
@@ -98,7 +98,7 @@ elif test $st -eq 127; then
   msg="missing on your system"
 else
   # Program was found and executed, but failed.  Give up.
-  exit $st
+  exit 0
 fi
 
 perl_URL=http://www.perl.org/
@@ -204,7 +204,7 @@ give_advice "$1" | sed -e '1s/^/WARNING: /' \
 
 # Propagate the correct exit status (expected to be 127 for a program
 # not found, 63 for a program that failed due to version mismatch).
-exit $st
+exit 0
 
 # Local variables:
 # eval: (add-hook 'write-file-hooks 'time-stamp)
