@@ -99,7 +99,7 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 am__installdirs = "$(DESTDIR)$(bindir)"
 PROGRAMS = $(bin_PROGRAMS)
-am_httpd_OBJECTS = httpd.$(OBJEXT)
+am_httpd_OBJECTS = httpd.$(OBJEXT) protocol.$(OBJEXT)
 httpd_OBJECTS = $(am_httpd_OBJECTS)
 httpd_LDADD = $(LDADD)
 httpd_LINK = $(CXXLD) $(AM_CXXFLAGS) $(CXXFLAGS) $(httpd_LDFLAGS) \
@@ -252,7 +252,7 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-httpd_SOURCES = httpd.cc
+httpd_SOURCES = httpd.cc protocol.cc
 httpd_LDFLAGS = -std=gnu++11
 all: all-am
 
@@ -341,6 +341,7 @@ distclean-compile:
 	-rm -f *.tab.c
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/httpd.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/protocol.Po@am__quote@
 
 .cc.o:
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXXCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<

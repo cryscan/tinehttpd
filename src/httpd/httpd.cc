@@ -1,9 +1,7 @@
 #include <string>
+#include <regex>
 #include <iostream>
 #include <sstream>
-#include <fstream>
-#include <map>
-#include <regex>
 #include <ctype.h>
 #include <stdlib.h>
 #include <fcntl.h>
@@ -11,9 +9,6 @@
 #include <unistd.h>
 #include <sys/socket.h>
 #include <sys/epoll.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/wait.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
@@ -22,17 +17,10 @@ using namespace std;
 
 void error_die(const char *);
 int startup(u_short *);
-void unimplemented(int);
-
-void headers(int, int);
-int read_http(int, stringstream &, int *);
-int serve_file(int, const string);
-int execute_cgi(int, const string, const string, const string, const map < string, string > &);
-int upgrade_protocol(int, const map < string, string > &, int *);
 void shell(const char *, string &);
-void not_found(int);
-void bad_request(int);
-void cannot_execute(int);
+
+int read_http(int, stringstream &, int *);
+int read_websocket(int, stringstream &);
 
 void recv_data(int, int, void *);
 void send_data(int, int, void *);
@@ -171,177 +159,6 @@ void send_data(int fd, int events, void *arg)
 		close(fd);
 }
 
-int read_http(int clientfd, stringstream & data, int *protocol)
-{
-	int cgi = 0;
-	string line, ret, method, url, path, query;
-	map < string, string > domain;
-	struct stat st;
-
-	getline(data, line);
-	stringstream strm(line);
-	strm >> method >> url;
-
-	while (getline(data, line))
-	{
-		auto loc = line.find(':');
-		if (loc != string::npos)
-		{
-			string first, second;
-			first.assign(line, 0, loc);
-			second.assign(line, loc + 2, string::npos);
-			domain[first] = second;
-		}
-		else
-			domain[""] = line;
-	}
-
-	if (method == "GET")
-	{
-		auto loc = url.find('?');
-		if (loc != string::npos)
-		{
-			query.assign(url, loc + 1, string::npos);
-			url.resize(loc);
-			cgi = 1;
-		}
-
-		auto iter = domain.find("Connection");
-		if (iter != domain.cend())
-			if (iter->second == "Upgrade")
-				return upgrade_protocol(clientfd, domain, protocol);
-	}
-	else if (method == "POST")
-		cgi = 1;
-	else
-		return -1;
-
-	path = url;
-	path.insert(0, data_path);
-	if (*(--path.cend()) == '/')
-		path += "index.html";
-	if (stat(path.c_str(), &st) == -1)
-		not_found(clientfd);
-	else
-	{
-		if ((st.st_mode & S_IFMT) == S_IFDIR)
-			path += "index.html";
-		if ((st.st_mode & S_IXUSR) || (st.st_mode & S_IXGRP) || (st.st_mode % S_IXOTH))
-			cgi = 1;
-		if (!cgi)
-			return serve_file(clientfd, path);
-		else
-			return execute_cgi(clientfd, path, method, query, domain);
-	}
-	return 1;
-}
-
-int execute_cgi(int clientfd, const string path, const string method, const string query,
-				const map < string, string > &domain)
-{
-	char buff[1024];
-	int output[2];
-	int input[2];
-	pid_t pid;
-	int status;
-	int content_length = -1;
-	char ch;
-	string ret;
-
-	if (method == "POST")
-	{
-		auto iter = domain.find("Content-Length");
-		if (iter != domain.cend())
-			content_length = atoi(iter->second.c_str());
-		else
-		{
-			bad_request(clientfd);
-			return -1;
-		}
-	}
-
-	if ((pipe(output) < 0) || (pipe(input) < 0) || ((pid = fork()) < 0))
-	{
-		cannot_execute(clientfd);
-		return -1;
-	}
-
-	if (pid == 0)
-	{
-		string method_env = method;
-		string query_env = query;
-		char length_env[255];
-		char path_str[255];
-
-		dup2(output[1], 1);
-		dup2(input[0], 0);
-		close(output[0]);
-		close(input[1]);
-
-		method_env.insert(0, "REQUEST_METHOD=");
-		putenv((char *)method_env.c_str());
-
-		if (method == "GET")
-		{
-			query_env.insert(0, "QUERY_STRING=");
-			putenv((char *)query_env.c_str());
-		}
-		else
-		{
-			sprintf(length_env, "CONTENT_LENGTH=%d", content_length);
-			putenv(length_env);
-		}
-
-		strcpy(path_str, path.c_str());
-		execl(path_str, path_str, NULL);
-		exit(0);
-	}
-	else
-	{
-		close(output[1]);
-		close(input[0]);
-
-		if (method == "POST")
-		{
-			auto iter = domain.find("");
-			if (iter != domain.cend())
-				ret = iter->second;
-			write(input[1], ret.c_str(), ret.length());
-		}
-
-		ret.clear();
-		while (read(output[0], &ch, 1) > 0)
-			ret += ch;
-
-		close(output[0]);
-		close(input[1]);
-		waitpid(pid, &status, 0);
-	}
-
-	int len = ret.length();
-	headers(clientfd, len);
-	return len = send(clientfd, ret.c_str(), len, 0);
-}
-
-int upgrade_protocol(int clientfd, const map < string, string > &domain, int *protocol)
-{
-	printf("protocol updated!\n");
-	return 1;
-}
-
-int serve_file(int clientfd, const string filename)
-{
-	ifstream fstrm(filename);
-	string line, ret;
-
-	while (getline(fstrm, line))
-		ret += line;
-
-	int len = ret.length();
-	headers(clientfd, len);
-	return len = send(clientfd, ret.c_str(), len, 0);
-}
-
 void shell(const char *command, string & output)
 {
 	char buf[1024];
@@ -351,81 +168,6 @@ void shell(const char *command, string & output)
 	buf[len] = '\0';
 	output.assign(buf);
 	pclose(fp);
-}
-
-void headers(int clientfd, int len)
-{
-	char buff[1024];
-
-	strcpy(buff, "HTTP/1.1 200 OK\r\n");
-	send(clientfd, buff, strlen(buff), 0);
-	strcpy(buff, "Server: jdbhttpd/0.1.0\r\n");
-	send(clientfd, buff, strlen(buff), 0);
-	strcpy(buff, "Content-Type: text/html\r\n");
-	send(clientfd, buff, strlen(buff), 0);
-	sprintf(buff, "Content-Length: %d\r\n", len);
-	send(clientfd, buff, strlen(buff), 0);
-	strcpy(buff, "\r\n");
-	send(clientfd, buff, strlen(buff), 0);
-}
-
-void not_found(int clientfd)
-{
-	char buff[1024];
-	char html[] = "<HTML><TITLE>Not Found</TITLE>\r\n\
-		       <BODY><P>The servlet could not fulfill your request because the resource specified is unavailable or nonexisted.\r\n\
-		       </BODY></HTML>\r\n";
-
-	strcpy(buff, "HTTP/1.1 404 NOT FOUND\r\n");
-	send(clientfd, buff, strlen(buff), 0);
-	strcpy(buff, "Server: jdbhttpd/0.1.0\r\n");
-	send(clientfd, buff, strlen(buff), 0);
-	strcpy(buff, "Content-Type:text/html\r\n");
-	send(clientfd, buff, strlen(buff), 0);
-	sprintf(buff, "Content-Length: %d\r\n", sizeof(html));
-	send(clientfd, buff, strlen(buff), 0);
-	strcpy(buff, "\r\n");
-	send(clientfd, buff, strlen(buff), 0);
-	strcpy(buff, html);
-	send(clientfd, buff, strlen(buff), 0);
-}
-
-void bad_request(int clientfd)
-{
-	char buff[1024];
-	char html[] = "<P>Your browser sent a bad request.\r\n";
-
-	strcpy(buff, "HTTP/1.1 400 BAD REQUEST\r\n");
-	send(clientfd, buff, strlen(buff), 0);
-	strcpy(buff, "Server: jdbhttpd/0.1.0\r\n");
-	send(clientfd, buff, strlen(buff), 0);
-	strcpy(buff, "Content-Type:text/html\r\n");
-	send(clientfd, buff, strlen(buff), 0);
-	sprintf(buff, "Content-Length: %d\r\n", sizeof(html));
-	send(clientfd, buff, strlen(buff), 0);
-	strcpy(buff, "\r\n");
-	send(clientfd, buff, strlen(buff), 0);
-	strcpy(buff, html);
-	send(clientfd, buff, strlen(buff), 0);
-}
-
-void cannot_execute(int clientfd)
-{
-	char buff[1024];
-	char html[] = "<P>Error prohibited CGI execution.\r\n";
-
-	strcpy(buff, "HTTP/1.1 500 Internal Server Error\r\n");
-	send(clientfd, buff, strlen(buff), 0);
-	strcpy(buff, "Server: jdbhttpd/0.1.0\r\n");
-	send(clientfd, buff, strlen(buff), 0);
-	strcpy(buff, "Content-Type:text/html\r\n");
-	send(clientfd, buff, strlen(buff), 0);
-	sprintf(buff, "Content-Length: %d\r\n", sizeof(html));
-	send(clientfd, buff, strlen(buff), 0);
-	strcpy(buff, "\r\n");
-	send(clientfd, buff, strlen(buff), 0);
-	strcpy(buff, html);
-	send(clientfd, buff, strlen(buff), 0);
 }
 
 int startup(u_short * port)
@@ -466,18 +208,9 @@ int startup(u_short * port)
 int main(int argc, char *argv[])
 {
 	shell("which httpd", binary_path);
-	vector < string > pattern =
-	{
-	"/xbin/httpd\n", "/bin/httpd\n"};
-	auto lambda =[pattern] (const string & str){
-		auto loc = string::npos;
-		auto iter = pattern.cbegin();
-		while (loc == string::npos && iter != pattern.cend())
-			loc = str.rfind(*(iter++));
-		return loc;
-	};
-	data_path.assign(binary_path, 0, lambda(binary_path));
-	data_path += "/share/htdocs\0";
+	const regex pattern("(.*)(/(bin|xbin)/httpd\\n)$", regex::optimize);
+	const string replace = "$1/share/htdocs";
+	data_path = regex_replace(binary_path, pattern, replace);
 	cout << binary_path << data_path << endl;
 
 	epollfd = epoll_create(max_events + 1);
@@ -511,4 +244,3 @@ int main(int argc, char *argv[])
 	close(epollfd);
 	return 0;
 }
-
