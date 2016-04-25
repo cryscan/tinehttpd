@@ -1,9 +1,8 @@
-#include <string>
-#include <vector>
-#include <map>
 #include <iostream>
 #include <sstream>
 #include <fstream>
+#include <string>
+#include <map>
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,18 +17,33 @@
 
 using namespace std;
 
-int read_http(int, stringstream &, int *);
-void headers(int, int);
+int read_http(int, stringstream &, void *);
+int read_websocket(int, stringstream &, void *);
 int serve_file(int, const string);
 int execute_cgi(int, const string, const string, const string, const map < string, string > &);
-int upgrade_protocol(int, const map < string, string > &, int *);
+int upgrade_protocol(int, const map < string, string > &, void *);
+void headers(int, int);
 void not_found(int);
 void bad_request(int);
 void cannot_execute(int);
 
+struct event_tag
+{
+	int fd;
+	void (*call_back) (int, int, void *);
+	int events;
+	void *arg;
+	int status;
+	int (*read_protocol) (int, stringstream &, void *);;
+	stringstream data;
+
+	void reset(int, void (*)(int, int, void *), void *);
+	void update(int, int);
+	void remove(int);
+};
 extern string binary_path, data_path;
 
-int read_http(int clientfd, stringstream & data, int *protocol)
+int read_http(int clientfd, stringstream & data, void *arg)
 {
 	int cgi = 0;
 	string line, ret, method, url, path, query;
@@ -67,7 +81,7 @@ int read_http(int clientfd, stringstream & data, int *protocol)
 		auto iter = domain.find("Connection");
 		if (iter != domain.cend())
 			if (iter->second == "Upgrade")
-				return upgrade_protocol(clientfd, domain, protocol);
+				return upgrade_protocol(clientfd, domain, arg);
 	}
 	else if (method == "POST")
 		cgi = 1;
@@ -194,9 +208,9 @@ int execute_cgi(int clientfd, const string path, const string method, const stri
 	return len = send(clientfd, ret.c_str(), len, 0);
 }
 
-int upgrade_protocol(int clientfd, const map < string, string > &domain, int *protocol)
+int upgrade_protocol(int clientfd, const map < string, string > &domain, void *arg)
 {
-	printf("protocol updated!\n");
+	event_tag *ev = (event_tag *) arg;
 	return 1;
 }
 
@@ -274,3 +288,4 @@ void cannot_execute(int clientfd)
 	strcpy(buff, html);
 	send(clientfd, buff, strlen(buff), 0);
 }
+

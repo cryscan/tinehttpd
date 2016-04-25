@@ -1,7 +1,7 @@
-#include <string>
-#include <regex>
 #include <iostream>
 #include <sstream>
+#include <string>
+#include <regex>
 #include <ctype.h>
 #include <stdlib.h>
 #include <fcntl.h>
@@ -16,15 +16,13 @@
 using namespace std;
 
 void error_die(const char *);
+void execute_shell(const char *, string &);
 int startup(u_short *);
-void shell(const char *, string &);
-
-int read_http(int, stringstream &, int *);
-int read_websocket(int, stringstream &);
-
 void recv_data(int, int, void *);
 void send_data(int, int, void *);
 void accept_connect(int, int, void *);
+int read_http(int, stringstream &, void *);
+int read_websocket(int, stringstream &, void *);
 
 struct event_tag
 {
@@ -33,7 +31,7 @@ struct event_tag
 	int events;
 	void *arg;
 	int status;
-	int protocol;
+	int (*read_protocol) (int, stringstream &, void *);;
 	stringstream data;
 
 	void reset(int fd, void (*call_back) (int, int, void *), void *arg)
@@ -42,7 +40,7 @@ struct event_tag
 		this->call_back = call_back;
 		this->events = 0;
 		this->status = 0;
-		this->protocol = 0;
+		this->read_protocol = read_http;
 		arg ? this->arg = arg : this->arg = this;
 		data.clear();
 	}
@@ -83,6 +81,17 @@ void error_die(const char *str)
 {
 	perror(str);
 	exit(1);
+}
+
+void execute_shell(const char *command, string & output)
+{
+	char buf[1024];
+	auto fp = popen(command, "r");
+
+	int len = fread(buf, sizeof(char), sizeof(buf) - 1, fp);
+	buf[len] = '\0';
+	output.assign(buf);
+	pclose(fp);
 }
 
 void accept_connect(int fd, int events, void *arg)
@@ -146,8 +155,8 @@ void send_data(int fd, int events, void *arg)
 {
 	event_tag *ev = (event_tag *) arg;
 	int len = 0;
-	if (!ev->protocol)
-		len = read_http(fd, ev->data, &(ev->protocol));
+	if (ev->read_protocol)
+		len = ev->read_protocol(fd, ev->data, ev);
 
 	ev->remove(epollfd);
 	if (len > 0)
@@ -157,17 +166,6 @@ void send_data(int fd, int events, void *arg)
 	}
 	else
 		close(fd);
-}
-
-void shell(const char *command, string & output)
-{
-	char buf[1024];
-	auto fp = popen(command, "r");
-
-	int len = fread(buf, sizeof(char), sizeof(buf) - 1, fp);
-	buf[len] = '\0';
-	output.assign(buf);
-	pclose(fp);
 }
 
 int startup(u_short * port)
@@ -207,7 +205,7 @@ int startup(u_short * port)
 
 int main(int argc, char *argv[])
 {
-	shell("which httpd", binary_path);
+	execute_shell("which httpd", binary_path);
 	const regex pattern("(.*)(/(bin|xbin)/httpd\\n)$", regex::optimize);
 	const string replace = "$1/share/htdocs";
 	data_path = regex_replace(binary_path, pattern, replace);
@@ -244,3 +242,4 @@ int main(int argc, char *argv[])
 	close(epollfd);
 	return 0;
 }
+
