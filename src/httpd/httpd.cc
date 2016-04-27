@@ -16,7 +16,7 @@
 using namespace std;
 
 void error_die(const char *);
-void execute_shell(const char *, string &);
+void get_path(string &);
 int startup(u_short *);
 void recv_data(int, int, void *);
 void send_data(int, int, void *);
@@ -83,15 +83,15 @@ void error_die(const char *str)
 	exit(1);
 }
 
-void execute_shell(const char *command, string & output)
+void get_path(string & str)
 {
-	char buf[1024];
-	auto fp = popen(command, "r");
-
-	int len = fread(buf, sizeof(char), sizeof(buf) - 1, fp);
-	buf[len] = '\0';
-	output.assign(buf);
-	pclose(fp);
+	char buff[1024];
+	int count = readlink("/proc/self/exe", buff, sizeof(buff) - 1);
+	if (count < 0 || count > sizeof(buff) - 1)
+		error_die("get path\n");
+	else
+		buff[count] = '\n';
+	str.assign(buff);
 }
 
 void accept_connect(int fd, int events, void *arg)
@@ -205,7 +205,7 @@ int startup(u_short * port)
 
 int main(int argc, char *argv[])
 {
-	execute_shell("which httpd", binary_path);
+	get_path(binary_path);
 	const regex pattern("(.*)(/(bin|xbin)/httpd\\n)$", regex::optimize);
 	const string replace = "$1/share/htdocs";
 	data_path = regex_replace(binary_path, pattern, replace);
@@ -242,4 +242,3 @@ int main(int argc, char *argv[])
 	close(epollfd);
 	return 0;
 }
-
