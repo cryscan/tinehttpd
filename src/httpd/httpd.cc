@@ -21,8 +21,8 @@ int startup(u_short *);
 void recv_data(int, int, void *);
 void send_data(int, int, void *);
 void accept_connect(int, int, void *);
-int read_http(int, stringstream &, void *);
-int read_websocket(int, stringstream &, void *);
+int http_proc(int, stringstream &, void *);
+int websocket_proc(int, stringstream &, void *);
 
 struct event_tag
 {
@@ -31,7 +31,7 @@ struct event_tag
 	int events;
 	void *arg;
 	int status;
-	int (*read_protocol) (int, stringstream &, void *);;
+	int (*proc) (int, stringstream &, void *);;
 	stringstream data;
 
 	void reset(int fd, void (*call_back) (int, int, void *), void *arg)
@@ -40,7 +40,7 @@ struct event_tag
 		this->call_back = call_back;
 		this->events = 0;
 		this->status = 0;
-		this->read_protocol = read_http;
+		this->proc = http_proc;
 		arg ? this->arg = arg : this->arg = this;
 		data.clear();
 	}
@@ -155,8 +155,8 @@ void send_data(int fd, int events, void *arg)
 {
 	event_tag *ev = (event_tag *) arg;
 	int len = 0;
-	if (ev->read_protocol)
-		len = ev->read_protocol(fd, ev->data, ev);
+	if (ev->proc)
+		len = ev->proc(fd, ev->data, ev);
 
 	ev->remove(epollfd);
 	if (len > 0)
@@ -242,3 +242,4 @@ int main(int argc, char *argv[])
 	close(epollfd);
 	return 0;
 }
+

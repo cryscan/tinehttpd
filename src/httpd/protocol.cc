@@ -17,8 +17,8 @@
 
 using namespace std;
 
-int read_http(int, stringstream &, void *);
-int read_websocket(int, stringstream &, void *);
+int http_proc(int, stringstream &, void *);
+int websocket_proc(int, stringstream &, void *);
 int serve_file(int, const string);
 int execute_cgi(int, const string, const string, const string, const map < string, string > &);
 int upgrade_protocol(int, const map < string, string > &, void *);
@@ -41,9 +41,10 @@ struct event_tag
 	void update(int, int);
 	void remove(int);
 };
+
 extern string binary_path, data_path;
 
-int read_http(int clientfd, stringstream & data, void *arg)
+int http_proc(int clientfd, stringstream & data, void *arg)
 {
 	int cgi = 0;
 	string line, ret, method, url, path, query;
