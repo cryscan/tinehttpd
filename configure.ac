@@ -5,7 +5,7 @@ AC_PREREQ([2.69])
 AC_INIT([tinehttpd], [1.0], [2360537343@qq.com])
 AC_CONFIG_SRCDIR([src/httpd/httpd.cc])
 AC_CONFIG_HEADERS([config.h])
-AM_INIT_AUTOMAKE(tinehttpd, 1.0)
+AM_INIT_AUTOMAKE([tinehttpd], [1.0])
 
 # Checks for programs.
 AC_PROG_CXX

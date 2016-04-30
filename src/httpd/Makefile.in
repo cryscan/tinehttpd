@@ -99,7 +99,8 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 am__installdirs = "$(DESTDIR)$(bindir)"
 PROGRAMS = $(bin_PROGRAMS)
-am_httpd_OBJECTS = httpd.$(OBJEXT) protocol.$(OBJEXT)
+am__dirstamp = $(am__leading_dot)dirstamp
+am_httpd_OBJECTS = ./httpd.$(OBJEXT) ./protocol.$(OBJEXT)
 httpd_OBJECTS = $(am_httpd_OBJECTS)
 httpd_LDADD = $(LDADD)
 httpd_LINK = $(CXXLD) $(AM_CXXFLAGS) $(CXXFLAGS) $(httpd_LDFLAGS) \
@@ -252,7 +253,8 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-httpd_SOURCES = httpd.cc protocol.cc
+AUTOMAKE_OPTIONS = subdir-objects
+httpd_SOURCES = ./httpd.cc ./protocol.cc
 httpd_LDFLAGS = -std=gnu++11
 all: all-am
 
@@ -329,6 +331,14 @@ uninstall-binPROGRAMS:
 
 clean-binPROGRAMS:
 	-test -z "$(bin_PROGRAMS)" || rm -f $(bin_PROGRAMS)
+./$(am__dirstamp):
+	@$(MKDIR_P) .
+	@: > ./$(am__dirstamp)
+$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) ./$(DEPDIR)
+	@: > $(DEPDIR)/$(am__dirstamp)
+./httpd.$(OBJEXT): ./$(am__dirstamp) $(DEPDIR)/$(am__dirstamp)
+./protocol.$(OBJEXT): ./$(am__dirstamp) $(DEPDIR)/$(am__dirstamp)
 
 httpd$(EXEEXT): $(httpd_OBJECTS) $(httpd_DEPENDENCIES) $(EXTRA_httpd_DEPENDENCIES) 
 	@rm -f httpd$(EXEEXT)
@@ -336,6 +346,7 @@ httpd$(EXEEXT): $(httpd_OBJECTS) $(httpd_DEPENDENCIES) $(EXTRA_httpd_DEPENDENCIE
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
+	-rm -f ./*.$(OBJEXT)
 
 distclean-compile:
 	-rm -f *.tab.c
@@ -344,15 +355,17 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/protocol.Po@am__quote@
 
 .cc.o:
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXXCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.o$$||'`;\
+@am__fastdepCXX_TRUE@	$(CXXCOMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ $< &&\
+@am__fastdepCXX_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Po
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXXCOMPILE) -c -o $@ $<
 
 .cc.obj:
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXXCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ `$(CYGPATH_W) '$<'`
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.obj$$||'`;\
+@am__fastdepCXX_TRUE@	$(CXXCOMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ `$(CYGPATH_W) '$<'` &&\
+@am__fastdepCXX_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Po
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXXCOMPILE) -c -o $@ `$(CYGPATH_W) '$<'`
@@ -472,6 +485,8 @@ clean-generic:
 distclean-generic:
 	-test -z "$(CONFIG_CLEAN_FILES)" || rm -f $(CONFIG_CLEAN_FILES)
 	-test . = "$(srcdir)" || test -z "$(CONFIG_CLEAN_VPATH_FILES)" || rm -f $(CONFIG_CLEAN_VPATH_FILES)
+	-rm -f ./$(am__dirstamp)
+	-test -z "$(DEPDIR)/$(am__dirstamp)" || rm -f $(DEPDIR)/$(am__dirstamp)
 
 maintainer-clean-generic:
 	@echo "This command is intended for maintainers to use"
