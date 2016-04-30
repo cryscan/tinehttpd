@@ -57,7 +57,6 @@ int main(int argc, char* argv[])
 {
 	long alpha, beta, theta;
 
-	printf("Contant-type:text/html\n\n");
 	printf("<HTML><TITLE>Altnet!</TITLE>\n<BODY>\n");
 
 	char *buf, *data;
