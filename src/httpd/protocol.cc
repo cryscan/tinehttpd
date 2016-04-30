@@ -3,6 +3,7 @@
 #include <fstream>
 #include <string>
 #include <map>
+#include <regex>
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
@@ -43,12 +44,14 @@ struct event_tag
 };
 
 extern string binary_path, data_path;
+const regex pattern("(.*?):(\\s)?(.*)\\r", regex::optimize);
 
 int http_proc(int clientfd, stringstream & data, void *arg)
 {
 	int cgi = 0;
 	string line, ret, method, url, path, query;
 	map < string, string > domain;
+	smatch match;
 	struct stat st;
 
 	getline(data, line);
@@ -56,18 +59,10 @@ int http_proc(int clientfd, stringstream & data, void *arg)
 	strm >> method >> url;
 
 	while (getline(data, line))
-	{
-		auto loc = line.find(':');
-		if (loc != string::npos)
-		{
-			string first, second;
-			first.assign(line, 0, loc);
-			second.assign(line, loc + 2, string::npos);
-			domain[first] = second;
-		}
+		if (regex_match(line, match, pattern))
+			domain[match.str(1)] = match.str(3);
 		else
 			domain[""] = line;
-	}
 
 	if (method == "GET")
 	{
