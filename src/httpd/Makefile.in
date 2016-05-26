@@ -100,7 +100,8 @@ CONFIG_CLEAN_VPATH_FILES =
 am__installdirs = "$(DESTDIR)$(bindir)"
 PROGRAMS = $(bin_PROGRAMS)
 am__dirstamp = $(am__leading_dot)dirstamp
-am_httpd_OBJECTS = ./httpd.$(OBJEXT) ./protocol.$(OBJEXT)
+am_httpd_OBJECTS = ./httpd.$(OBJEXT) ./protocol.$(OBJEXT) \
+	./event.$(OBJEXT)
 httpd_OBJECTS = $(am_httpd_OBJECTS)
 httpd_LDADD = $(LDADD)
 httpd_LINK = $(CXXLD) $(AM_CXXFLAGS) $(CXXFLAGS) $(httpd_LDFLAGS) \
@@ -254,7 +255,7 @@ top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 AUTOMAKE_OPTIONS = subdir-objects
-httpd_SOURCES = ./httpd.cc ./protocol.cc
+httpd_SOURCES = ./httpd.cc ./protocol.cc ./event.cc
 httpd_LDFLAGS = -std=gnu++11
 all: all-am
 
@@ -339,6 +340,7 @@ $(DEPDIR)/$(am__dirstamp):
 	@: > $(DEPDIR)/$(am__dirstamp)
 ./httpd.$(OBJEXT): ./$(am__dirstamp) $(DEPDIR)/$(am__dirstamp)
 ./protocol.$(OBJEXT): ./$(am__dirstamp) $(DEPDIR)/$(am__dirstamp)
+./event.$(OBJEXT): ./$(am__dirstamp) $(DEPDIR)/$(am__dirstamp)
 
 httpd$(EXEEXT): $(httpd_OBJECTS) $(httpd_DEPENDENCIES) $(EXTRA_httpd_DEPENDENCIES) 
 	@rm -f httpd$(EXEEXT)
@@ -351,6 +353,7 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/event.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/httpd.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/protocol.Po@am__quote@
 

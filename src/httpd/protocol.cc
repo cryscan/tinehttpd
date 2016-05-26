@@ -17,6 +17,7 @@
 #include <arpa/inet.h>
 
 using namespace std;
+#include "event.h"
 
 int http_proc(int, stringstream &, void *);
 int websocket_proc(int, stringstream &, void *);
@@ -27,21 +28,6 @@ void headers(int, int);
 void not_found(int);
 void bad_request(int);
 void cannot_execute(int);
-
-struct event_tag
-{
-	int fd;
-	void (*call_back) (int, int, void *);
-	int events;
-	void *arg;
-	int status;
-	int (*read_protocol) (int, stringstream &, void *);;
-	stringstream data;
-
-	void reset(int, void (*)(int, int, void *), void *);
-	void update(int, int);
-	void remove(int);
-};
 
 extern string binary_path, data_path;
 const regex pattern("(.*?):(\\s)?(.*)\\r", regex::optimize);
@@ -117,8 +103,8 @@ int serve_file(int clientfd, const string filename)
 	return len = send(clientfd, ret.c_str(), len, 0);
 }
 
-int execute_cgi(int clientfd, const string path, const string method, const string query,
-				const map < string, string > &domain)
+int execute_cgi(int clientfd, const string path, const string method,
+				const string query, const map < string, string > &domain)
 {
 	char buff[1024];
 	int output[2];
@@ -284,4 +270,3 @@ void cannot_execute(int clientfd)
 	strcpy(buff, html);
 	send(clientfd, buff, strlen(buff), 0);
 }
-

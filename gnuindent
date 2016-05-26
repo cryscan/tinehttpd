@@ -1,0 +1,15 @@
+#!/bin/bash
+forlp(){
+	for file in $1/*
+	do
+		if [ -d $file  ];then
+			forlp $file
+		elif [ -f $file ];then
+			if [ "${file##*.}" = "cc" -o "${file##*.}" = "h" ];then
+				indent -bap -bli0 -i4 -l99 -ncs -npcs -npsl -fca -lc79 -fc1 -ts4 $file
+				echo $file
+			fi
+		fi
+	done
+}
+forlp '.'

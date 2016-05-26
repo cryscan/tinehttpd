@@ -14,6 +14,7 @@
 
 #define max_events 512
 using namespace std;
+#include "event.h"
 
 void error_die(const char *);
 void get_path(string &);
@@ -23,57 +24,8 @@ void send_data(int, int, void *);
 void accept_connect(int, int, void *);
 int http_proc(int, stringstream &, void *);
 int websocket_proc(int, stringstream &, void *);
-
-struct event_tag
-{
-	int fd;
-	void (*call_back) (int, int, void *);
-	int events;
-	void *arg;
-	int status;
-	int (*proc) (int, stringstream &, void *);;
-	stringstream data;
-
-	void reset(int fd, void (*call_back) (int, int, void *), void *arg)
-	{
-		this->fd = fd;
-		this->call_back = call_back;
-		this->events = 0;
-		this->status = 0;
-		this->proc = http_proc;
-		arg ? this->arg = arg : this->arg = this;
-		data.clear();
-	}
-
-	void update(int epollfd, int events)
-	{
-		struct epoll_event ev = { 0, {0} };
-		int op;
-		ev.data.ptr = this;
-		ev.events = this->events = events;
-		if (this->status == 1)
-			op = EPOLL_CTL_MOD;
-		else
-		{
-			op = EPOLL_CTL_ADD;
-			this->status = 1;
-		}
-		if (epoll_ctl(epollfd, op, this->fd, &ev) < 0)
-			error_die("epoll add failed.\n");
-	}
-
-	void remove(int epollfd)
-	{
-		struct epoll_event ev = { 0, {0} };
-		if (this->status != 1)
-			return;
-		ev.data.ptr = this;
-		this->status = 0;
-		epoll_ctl(epollfd, EPOLL_CTL_DEL, this->fd, &ev);
-	}
-};
-
 int epollfd;
+
 event_tag *event_tag_lst[max_events + 1];
 string binary_path, data_path;
 
@@ -242,4 +194,3 @@ int main(int argc, char *argv[])
 	close(epollfd);
 	return 0;
 }
-
